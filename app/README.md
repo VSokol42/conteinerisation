@@ -51,3 +51,51 @@ Size of images:
     hw_lec2                          1.1-slim     97bca6a0c290   7 seconds ago        141MB
     hw_lec2                          1.1-alpine   38e835038e8f   7 seconds ago        75.7MB
 
+
+## Level 3
+
+Dockerfile with multi-stage building, runtime use slim image and user without root privileges.
+
+    ARG BUILDER_IMAGE_VERSION="3.13"
+    ARG RUNTIME_IMAGE_VERSION="3.13-slim"
+    ARG NONROOT="user42"
+    
+    FROM python:${BUILDER_IMAGE_VERSION} AS builder
+    
+    ENV PYTHONDONTWRITEBYTECODE=1 \
+        PYTHONUNBUFFERED=1 \
+        PATH="/opt/venv/bin:$PATH"
+    
+    WORKDIR /app
+    
+    RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        && rm -rf /var/lib/apt/lists/* \
+        && python -m venv /opt/venv
+    
+    
+    COPY requirements.txt .
+    RUN pip install --no-cache-dir -r requirements.txt
+    
+    
+    FROM python:${RUNTIME_IMAGE_VERSION} AS runtime
+    
+    ARG NONROOT
+    
+    ENV PYTHONDONTWRITEBYTECODE=1 \
+        PYTHONUNBUFFERED=1 \
+        PATH="/opt/venv/bin:$PATH"
+    
+    WORKDIR /app
+    
+    COPY --from=builder /opt/venv /opt/venv
+    
+    COPY . .
+    
+    RUN useradd --create-home ${NONROOT} && chown -R ${NONROOT}:${NONROOT} /app
+    USER ${NONROOT}
+    
+    EXPOSE 8000
+    
+    CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+
